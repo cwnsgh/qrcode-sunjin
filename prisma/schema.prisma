@@ -1,0 +1,158 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Enums ---
+enum Role {
+  ADMIN
+  MANAGER
+  WORKER
+}
+
+enum ChecklistItemType {
+  TEXT
+  TEXTAREA
+  RADIO
+  CHECKBOX
+  PHOTO
+}
+
+// --- Models ---
+model User {
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String   @unique
+  passwordHash  String
+  phoneNumber   String?
+  role          Role     @default(WORKER)
+  pinHash       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // --- Relationships ---
+  createdChecklists Checklist[] @relation("CreatedChecklists") // 이 사용자가 생성한 점검표들 (Admin, Manager)
+  assignments       Assignment[] @relation("WorkerAssignments") // 이 노동자에게 할당된 시설들 (Worker)
+  assignedBy        Assignment[] @relation("AssignedBy")      // 이 사용자가 할당한 내역 (Admin, Manager)
+  submissions       Submission[] // 이 노동자가 제출한 점검 결과들 (Worker)
+  sentMessages      ChatMessage[] @relation("SentMessages")    // 보낸 메시지
+  receivedMessages  ChatMessage[] @relation("ReceivedMessages") // 받은 메시지
+}
+
+model Facility {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String?
+  location    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // --- Relationships ---
+  checklists  Checklist[]  // 이 시설의 점검표들
+  assignments Assignment[] // 이 시설에 배정된 내역
+  submissions Submission[] // 이 시설에서 제출된 점검 결과들
+}
+
+model Checklist {
+  id          Int      @id @default(autoincrement())
+  facilityId  Int      // 외래 키 (Facility 참조)
+  title       String
+  description String?
+  createdById Int      // 외래 키 (User 참조 - 생성자)
+  isActive    Boolean  @default(true) // 점검표 활성 여부
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // --- Relationships ---
+  facility    Facility         @relation(fields: [facilityId], references: [id], onDelete: Cascade) // Facility 와 1:N 관계
+  createdBy   User             @relation("CreatedChecklists", fields: [createdById], references: [id], onDelete: Restrict) // User 와 1:N 관계 (생성자)
+  items       ChecklistItem[]  // 이 점검표의 항목들
+  submissions Submission[]     // 이 점검표를 사용한 제출 결과들
+}
+
+model ChecklistItem {
+  id           Int               @id @default(autoincrement())
+  checklistId  Int               // 외래 키 (Checklist 참조)
+  question     String
+  itemType     ChecklistItemType // 항목 타입 (TEXT, RADIO 등)
+  options      Json?             // 선택지 (RADIO, CHECKBOX 용, JSON 형식)
+  order        Int               // 항목 순서
+  isRequired   Boolean           @default(false) // 필수 여부
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  // --- Relationships ---
+  checklist       Checklist        @relation(fields: [checklistId], references: [id], onDelete: Cascade) // Checklist 와 1:N 관계
+  submissionAnswers SubmissionAnswer[] // 이 항목에 대한 답변들
+}
+
+model Assignment {
+  id           Int      @id @default(autoincrement())
+  facilityId   Int      // 외래 키 (Facility 참조)
+  workerId     Int      // 외래 키 (User 참조 - 노동자)
+  assignedById Int      // 외래 키 (User 참조 - 할당자 Admin/Manager)
+  createdAt    DateTime @default(now())
+
+  // --- Relationships ---
+  facility   Facility @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  worker     User     @relation("WorkerAssignments", fields: [workerId], references: [id], onDelete: Cascade)
+  assignedBy User     @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: Restrict) // 할당자가 삭제되어도 기록은 남도록 Restrict 고려
+
+  // --- Constraints ---
+  @@unique([facilityId, workerId]) // 특정 시설에 동일 노동자가 중복 배정되지 않도록 설정
+}
+
+model Submission {
+  id          Int      @id @default(autoincrement())
+  facilityId  Int      // 외래 키 (Facility 참조)
+  checklistId Int      // 외래 키 (Checklist 참조)
+  workerId    Int      // 외래 키 (User 참조 - 제출자)
+  submittedAt DateTime @default(now()) // 제출 시각
+
+  // --- Relationships ---
+  facility    Facility          @relation(fields: [facilityId], references: [id], onDelete: Cascade)
+  checklist   Checklist         @relation(fields: [checklistId], references: [id], onDelete: Restrict) // 점검표가 삭제되어도 제출 기록은 남도록 Restrict 고려
+  worker      User              @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  answers     SubmissionAnswer[] // 이 제출에 포함된 답변들
+}
+
+model SubmissionAnswer {
+  id              Int      @id @default(autoincrement())
+  submissionId    Int      // 외래 키 (Submission 참조)
+  checklistItemId Int      // 외래 키 (ChecklistItem 참조)
+  answerText      String?  // 텍스트 답변
+  answerFileUrl   String?  // 사진 파일 URL
+
+  // createdAt 필드는 보통 불필요할 수 있음 (submission 의 submittedAt 으로 충분)
+  // createdAt    DateTime @default(now())
+
+  // --- Relationships ---
+  submission    Submission    @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  checklistItem ChecklistItem @relation(fields: [checklistItemId], references: [id], onDelete: Cascade) // 항목이 삭제되면 답변도 의미 없어지므로 Cascade
+
+   // --- Index ---
+   @@index([submissionId]) // submissionId로 조회가 많을 것이므로 인덱스 추가
+}
+
+model ChatMessage {
+  id             Int      @id @default(autoincrement())
+  senderId       Int      // 외래 키 (User 참조 - 보낸 사람)
+  receiverId     Int      // 외래 키 (User 참조 - 받는 사람)
+  messageContent String   @db.Text // 긴 텍스트 저장 가능하도록 @db.Text 사용
+  sentAt         DateTime @default(now())
+
+  // --- Relationships ---
+  sender   User @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // --- Index ---
+  @@index([senderId, receiverId, sentAt]) // 채팅 내역 조회 성능 향상을 위한 인덱스
+  @@index([receiverId, senderId, sentAt]) // 반대 방향 조회도 고려
+}
