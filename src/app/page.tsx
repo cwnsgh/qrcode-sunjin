@@ -1,4 +1,3 @@
-// src/app/page.tsx
 "use client"; // useSession, signIn, signOut 훅/함수는 클라이언트 컴포넌트에서 사용해야 함!
 
 import { useSession, signIn, signOut } from "next-auth/react";

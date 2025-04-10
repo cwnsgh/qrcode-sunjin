@@ -1,4 +1,3 @@
-import NextAuth from "next-auth";
 import authOptionsDefinition from "@/auth"; // auth.ts의 default export 가져오기
 import handler from "@/auth";
 

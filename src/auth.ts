@@ -8,7 +8,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { prisma } from "./lib/db"; // 경로 확인!
 import bcrypt from "bcrypt";
-import { Role, User as PrismaUser } from "@prisma/client"; // Prisma User에 별칭
+import { Role } from "@prisma/client"; // Prisma User에 별칭
 
 // NextAuth 설정을 별도 객체로 분리하고 AuthOptions 타입 지정
 export const authOptions: AuthOptions = {
